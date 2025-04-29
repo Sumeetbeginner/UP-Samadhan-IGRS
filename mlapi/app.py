@@ -1,7 +1,4 @@
 
-
-
-
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from transformers import CLIPProcessor, CLIPModel
@@ -24,7 +21,7 @@ app = Flask(__name__)
 CORS(app, resources={
     r"/*": {
         "origins": "*",
-        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
         "allow_headers": ["Content-Type", "Authorization"],
         "supports_credentials": True
     }
@@ -170,6 +167,177 @@ def predict_and_describe_image():
         }), 500
 
 # ... [rest of your existing routes remain the same] ...
+
+
+
+
+@app.route('/classifyTextComplaint', methods=['POST'])
+def classify_text_complaint():
+    try:
+        data = request.get_json()
+        text_complaint = data.get('text', '')
+        
+        if not text_complaint:
+            return jsonify({'error': 'No text provided'}), 400
+        
+        categories = [
+            "Fighting", "Uncleanliness", "Accident", "Missing Document",
+            "Power Outage", "Water Supply Issue", "Illegal Construction", "Corruption Complaint",
+            "Garbage Dump", "Noise Pollution", "Public Harassment", "Stray Animals",
+            "Street Light", "Road Damage/Potholes", "Tree Fallen", "Documents"
+        ]
+        
+        prompt = f"""Classify the following complaint strictly into one of these categories: 
+        {', '.join(categories)}.
+        
+        Complaint: {text_complaint}
+        
+        Respond ONLY with the category name that best fits the complaint."""
+        
+        response = hf_client.chat.completions.create(
+            model="llava-hf/llava-1.5-7b-hf",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": prompt
+                        }
+                    ]
+                }
+            ],
+            max_tokens=50,
+        )
+        
+        classification = response.choices[0].message.content.strip()
+        
+        # Validate the classification is one of our categories
+        if classification not in categories:
+            classification = "Other"
+        
+        return jsonify({
+            "success": True,
+            "classification": classification
+        })
+        
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+@app.route('/ocr', methods=['POST'])
+def ocr_processing():
+    try:
+        # Clean up old files before processing
+        
+        # Check if image is provided
+        if 'image' not in request.files and 'image_url' not in request.json:
+            return jsonify({'error': 'No image or image_url provided'}), 400
+        
+        image_url = None
+        
+        # Get image
+        if 'image' in request.files:
+            file = request.files['image']
+            if file.filename == '':
+                return jsonify({'error': 'No selected file'}), 400
+            if file and allowed_file(file.filename):
+                # Save to temp folder and get URL
+                temp_url = save_temp_image(file)
+                image_url = f"http://{request.host}{temp_url}"
+                img_path = os.path.join(app.config['UPLOAD_FOLDER'], temp_url.split('/')[-1])
+        else:
+            image_url = request.json.get('image_url')
+            response = requests.get(image_url)
+            filename = f"{uuid.uuid4().hex}.jpg"
+            img_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            with open(img_path, 'wb') as f:
+                f.write(response.content)
+        
+        # Perform OCR
+        result = ocr_engine.ocr(img_path, cls=True)
+        
+        # Extract all text
+        extracted_text = []
+        for line in result:
+            for word in line:
+                extracted_text.append(word[1][0])
+        
+        full_text = ' '.join(extracted_text)
+        
+        # Document type detection patterns
+        doc_patterns = {
+            'electricity_bill': r'(electricity|power|bill|kwh|kilowatt)',
+            'fir': r'(f\.i\.r|first information report|police report)',
+            'identity': r'(aadhaar|pan|voter id|passport|driving license)',
+            'government': r'(government|govt|official|ministry|department)',
+            'invoice': r'(invoice|bill|tax|amount|total|rs\.?)',
+            'receipt': r'(receipt|paid|payment|received)',
+            'certificate': r'(certificate|degree|diploma|award)'
+        }
+        
+        # Detect document type
+        doc_type = 'unknown'
+        for type_name, pattern in doc_patterns.items():
+            if re.search(pattern, full_text, re.IGNORECASE):
+                doc_type = type_name
+                break
+        
+        # Extract common fields based on document type
+        extracted_fields = {}
+        
+        if doc_type == 'electricity_bill':
+            # Extract common electricity bill fields
+            amount = re.search(r'(total|amount|rs\.?)\s*[:=]?\s*(\d+\.\d{2})', full_text, re.IGNORECASE)
+            if amount:
+                extracted_fields['amount'] = amount.group(2)
+            
+            consumer_no = re.search(r'(consumer|account)\s*(no|number|#)?\s*[:=]?\s*(\d+)', full_text, re.IGNORECASE)
+            if consumer_no:
+                extracted_fields['consumer_number'] = consumer_no.group(3)
+        
+        elif doc_type == 'fir':
+            # Extract FIR fields
+            fir_no = re.search(r'(f\.i\.r|fir)\s*(no|number|#)?\s*[:=]?\s*(\d+)', full_text, re.IGNORECASE)
+            if fir_no:
+                extracted_fields['fir_number'] = fir_no.group(3)
+            
+            date = re.search(r'(date)\s*[:=]?\s*(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})', full_text, re.IGNORECASE)
+            if date:
+                extracted_fields['date'] = date.group(2)
+        
+        elif doc_type == 'identity':
+            # Extract ID fields
+            id_no = re.search(r'(number|no|#)\s*[:=]?\s*([A-Z0-9]{8,12})', full_text, re.IGNORECASE)
+            if id_no:
+                extracted_fields['id_number'] = id_no.group(2)
+            
+            name = re.search(r'(name)\s*[:=]?\s*([A-Z][a-z]+\s[A-Z][a-z]+)', full_text)
+            if name:
+                extracted_fields['name'] = name.group(2)
+        
+        return jsonify({
+            "success": True,
+            "document_type": doc_type,
+            "extracted_text": full_text,
+            "extracted_fields": extracted_fields,
+            "image_url": image_url  # Return the temp URL for reference
+        })
+        
+    except Exception as e:
+        # Clean up in case of error
+        if 'img_path' in locals():
+            try:
+                os.remove(img_path)
+            except:
+                pass
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

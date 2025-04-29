@@ -113,7 +113,7 @@ const ComplaintForm = ({ onSubmit, initialData = {} }) => {
               onChange={handleChange}
               required
             >
-              <option value="">Select a category</option>
+            <option value="">Select a category</option>
             <option value="Fighting">Fighting</option>
             <option value="Uncleanliness">Uncleanliness</option>
             <option value="Accident">Accident</option>
