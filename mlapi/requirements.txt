@@ -1,0 +1,10 @@
+flask
+flask-cors
+transformers
+torch
+pillow
+requests
+huggingface-hub
+paddleocr
+paddlepaddle
+werkzeug
