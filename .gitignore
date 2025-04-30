@@ -2,3 +2,4 @@ node_modules
 env
 temp_uploads
 .env
+secret.md

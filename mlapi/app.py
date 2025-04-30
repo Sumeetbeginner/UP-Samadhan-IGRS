@@ -29,17 +29,17 @@ CORS(app, resources={
 
 # Cloudinary configuration
 cloudinary.config(
-    cloud_name='dxakdnlny',
-    api_key='985554248217191',
-    api_secret='9Y5hbPVTd5eW54DwQMZoc5c_3Ok'
+    cloud_name='',
+    api_key='',
+    api_secret=''
 )
 
 # Initialize models
 clip_processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
 clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
 hf_client = InferenceClient(
-    provider="nebius",
-    api_key="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",
+    provider="",
+    api_key="",
 )
 ocr_engine = PaddleOCR(use_angle_cls=True, lang='en', use_gpu=True)
 
