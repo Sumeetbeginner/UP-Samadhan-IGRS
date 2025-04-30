@@ -1,7 +1,7 @@
 
 # UP Samadhan (UP Govt - IGRS)
 
-This project is an enhancement of the IGRS (UP Samadhan) complaint management system. It uses a Vision Transformer model to extract features from complaint images and a custom classifier to categorize and prioritize grievances automatically. The system improves routing efficiency, reduces manual review time, and ensures timely redressal of public complaints.
+This project is an enhancement of the IGRS (UP Samadhan) complaint management system. It uses a Vision Transformer model to extract features from complaint images and a classifier to categorize and prioritize grievances automatically. The system improves routing efficiency, reduces manual review time, and ensures timely redressal of public complaints.
 
 ---
 
